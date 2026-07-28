@@ -102,7 +102,7 @@ const API_PARAMS = {
   user: 'umitaka',
   password: 'RW0BB9M7UJMA48hoSDGL',
 };
-const GROUP_FIELD = 'ad_id';
+const GROUP_FIELD = 'campaign_id';
 const SUB_FIELD = 'keywords';
 const DATE_FIELD = 'start_date';
 const VALUE_FIELD = 'estimated_earnings';
@@ -256,9 +256,9 @@ function render(data, showSub) {
   tableContent.style.display = '';
 
   if (showSub && SUB_FIELD) {
-    tableHead.innerHTML = '<th>ad_id</th><th>keywords</th><th class="num">回收</th><th class="num">转化</th><th class="num">RPC</th>';
+    tableHead.innerHTML = '<th>campaign_id</th><th>keywords</th><th class="num">回收</th><th class="num">转化</th><th class="num">RPC</th>';
   } else {
-    tableHead.innerHTML = '<th>ad_id</th><th class="num">回收</th><th class="num">转化</th><th class="num">RPC</th>';
+    tableHead.innerHTML = '<th>campaign_id</th><th class="num">回收</th><th class="num">转化</th><th class="num">RPC</th>';
   }
 
   let html = '';
