@@ -1,0 +1,54 @@
+name: 定时拉取 TAKA 数据
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '指定日期 (YYYY-MM-DD)'
+        required: false
+        default: ''
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 获取日期
+        id: date
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            echo "TARGET_DATE=${{ github.event.inputs.date }}" >> $GITHUB_OUTPUT
+          else
+            echo "TARGET_DATE=$(date -d 'yesterday' '+%Y-%m-%d')" >> $GITHUB_OUTPUT
+          fi
+      - name: 拉取 Compado API
+        env:
+          COMPADO_USER: ${{ secrets.COMPADO_USER }}
+          COMPADO_PASS: ${{ secrets.COMPADO_PASS }}
+        run: |
+          CUSER="${COMPADO_USER:-umitaka}"
+          CPASS="${COMPADO_PASS:-RW0BB9M7UJMA48hoSDGL}"
+          DATE="${{ steps.date.outputs.TARGET_DATE }}"
+          mkdir -p data
+          page=1; page_count=1; all='[]'
+          while [ $page -le $page_count ]; do
+            resp=$(curl -s "https://api.compado.com/adsense/clickid-report?user=${CUSER}&password=${CPASS}&start_date=${DATE}&end_date=${DATE}&page=${page}")
+            s=$(echo "$resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+            [ "$s" != "ok" ] && [ $page -eq 1 ] && echo "API失败" && exit 0
+            [ "$s" != "ok" ] && break
+            pc=$(echo "$resp" | python3 -c "import sys,json;print(json.load(sys.stdin).get('page_count',0))")
+            page_count=$([ -n "$pc" ] && [ "$pc" -gt 0 ] && echo "$pc" || echo 0)
+            its=$(echo "$resp" | python3 -c "import sys,json;print(json.dumps(json.load(sys.stdin).get('click_ids',[])))")
+            [ "$its" != "[]" ] && all=$(echo "$all" | python3 -c "import sys,json;e=json.load(sys.stdin);e.extend(json.loads('$its'));print(json.dumps(e))")
+            page=$((page+1))
+          done
+          echo "{\"status\":\"ok\",\"date\":\"$DATE\",\"click_ids\":$all}" > "data/${DATE}.json"
+          echo "$(echo $all|python3 -c 'import sys,json;print(len(json.load(sys.stdin)))') 条写入 data/${DATE}.json"
+      - name: 提交并推送
+        run: |
+          git config user.name "compado-bot"
+          git config user.email "compado-bot@github.com"
+          git add data/
+          git diff --staged --quiet || (git commit -m "chore: 更新数据 $(date '+%Y-%m-%d')" && git push)

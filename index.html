@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Github TAKA Report</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f0f2f5;color:#1f2937;padding:24px}
+.container{max-width:1200px;margin:0 auto}
+
+.header{background:#fff;border-radius:12px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.header h1{font-size:18px;font-weight:700;color:#111827;margin-right:auto}
+.header h1 small{font-weight:400;font-size:12px;color:#9ca3af}
+.control-group{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+.date-input{padding:7px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;outline:none}
+.date-input:focus{border-color:#4f46e5}
+
+.btn{padding:7px 18px;border:none;border-radius:6px;font-size:14px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#4f46e5;color:#fff}
+.btn-primary:hover{background:#4338ca}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+
+.toggle-wrap{display:flex;align-items:center;gap:6px;font-size:13px;color:#6b7280;user-select:none}
+.toggle-track{position:relative;width:40px;height:22px;background:#d1d5db;border-radius:11px;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle-track.on{background:#4f46e5}
+.toggle-track::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.toggle-track.on::after{transform:translateX(18px)}
+.toggle-label{font-weight:600;color:#374151}
+
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.summary-card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.summary-card .num{font-size:22px;font-weight:700;color:#111827;font-variant-numeric:tabular-nums}
+.summary-card .label{font-size:11px;color:#9ca3af;margin-top:2px}
+
+.table-wrap{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:#f9fafb}
+th{padding:10px 14px;text-align:left;font-weight:600;color:#6b7280;border-bottom:2px solid #e5e7eb;font-size:11px;white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid #f3f4f6}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f9fafb}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+
+.status-msg{text-align:center;padding:60px 20px;color:#9ca3af}
+.status-msg .icon{font-size:32px;margin-bottom:8px;display:block}
+.banner{padding:10px 16px;border-radius:8px;margin-bottom:12px;font-size:13px;display:none}
+.banner.show{display:block}
+.banner.err{background:#fef2f2;color:#b91c1c}
+.banner.info{background:#eff6ff;color:#1e40af}
+
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #e5e7eb;border-top-color:#4f46e5;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:640px){
+  body{padding:12px}
+  .header{padding:14px 16px;flex-direction:column;align-items:stretch}
+  .header h1{margin-right:0}
+  .control-group{justify-content:space-between}
+  th,td{padding:8px 10px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Github TAKA Report <small>Compado ClickID · umitaka</small></h1>
+    <div class="control-group">
+      <label for="datePicker" style="font-size:13px;color:#6b7280">📅</label>
+      <input type="date" id="datePicker" class="date-input">
+      <button id="queryBtn" class="btn btn-primary">查询</button>
+      <div class="toggle-wrap">
+        <span class="toggle-label" id="toggleLabel">看kw</span>
+        <div class="toggle-track" id="toggleSwitch" role="switch" aria-checked="false"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="banner err" id="errorBanner"></div>
+  <div class="banner info" id="infoBanner"></div>
+
+  <div class="summary">
+    <div class="summary-card"><div class="num" id="sumEarn">-</div><div class="label">总回收 (USD)</div></div>
+    <div class="summary-card"><div class="num" id="sumClk">-</div><div class="label">总转化</div></div>
+    <div class="summary-card"><div class="num" id="sumAds">-</div><div class="label">广告数</div></div>
+    <div class="summary-card"><div class="num" id="sumRpc">-</div><div class="label">RPC</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="status-msg" id="statusMsg"><span class="icon">📊</span><p>选择日期后点击查询</p></div>
+    <div id="tableContent" style="display:none">
+      <table><thead><tr id="tableHead"></tr></thead><tbody id="tableBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== API 配置 ======
+const API_BASE = 'https://api.compado.com/adsense/clickid-report';
+const API_PARAMS = {
+  user: 'umitaka',
+  password: 'RW0BB9M7UJMA48hoSDGL',
+};
+const GROUP_FIELD = 'ad_id';
+const SUB_FIELD = 'keywords';
+const DATE_FIELD = 'start_date';
+const VALUE_FIELD = 'estimated_earnings';
+const CLICK_FIELD = 'estimated_clicks';
+const DATA_PATH = ['click_ids'];
+const PAGE_FIELD = 'page';
+const PAGE_COUNT_FIELD = 'page_count';
+const STATUS_FIELD = 'status';
+const STATUS_OK = 'ok';
+
+// ====== 元素引用 ======
+const sumEarn = document.getElementById('sumEarn');
+const sumClk = document.getElementById('sumClk');
+const sumAds = document.getElementById('sumAds');
+const sumRpc = document.getElementById('sumRpc');
+const datePicker = document.getElementById('datePicker');
+const queryBtn = document.getElementById('queryBtn');
+const toggleSwitch = document.getElementById('toggleSwitch');
+const toggleLabel = document.getElementById('toggleLabel');
+const statusMsg = document.getElementById('statusMsg');
+const tableContent = document.getElementById('tableContent');
+const tableHead = document.getElementById('tableHead');
+const tableBody = document.getElementById('tableBody');
+const errorBanner = document.getElementById('errorBanner');
+const infoBanner = document.getElementById('infoBanner');
+
+// 默认日期 = 今天
+const t = new Date();
+datePicker.value = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+
+// ====== 开关 ======
+let showSub = false;
+toggleSwitch.onclick = () => {
+  showSub = !showSub;
+  toggleSwitch.classList.toggle('on', showSub);
+  toggleSwitch.setAttribute('aria-checked', showSub);
+  toggleLabel.textContent = showSub ? '看kw：开' : '看kw';
+  if (window._lastData) render(window._lastData, showSub);
+};
+
+// ====== 工具函数 ======
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function showError(msg) { errorBanner.textContent = msg; errorBanner.classList.add('show'); }
+function hideError() { errorBanner.classList.remove('show'); infoBanner.classList.remove('show'); }
+function showStatus(msg) {
+  statusMsg.style.display = '';
+  statusMsg.innerHTML = `<span class="icon">📊</span><p>${msg}</p>`;
+  tableContent.style.display = 'none';
+}
+function resetSummary() { sumEarn.textContent='0'; sumClk.textContent='0'; sumAds.textContent='0'; sumRpc.textContent='0'; }
+
+// ====== API 请求 ======
+async function fetchPage(dateStr, page) {
+  const params = new URLSearchParams(API_PARAMS);
+  params.set(DATE_FIELD, dateStr);
+  params.set('end_date', dateStr);
+  if (PAGE_FIELD) params.set(PAGE_FIELD, page);
+  const url = `${API_BASE}?${params.toString()}`;
+
+  // 尝试直接请求
+  try {
+    const resp = await fetch(url);
+    if (resp.ok) return await resp.json();
+  } catch (_) {}
+
+  // CORS 代理
+  const proxies = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  ];
+  for (const p of proxies) {
+    try {
+      const resp = await fetch(p(url), { signal: AbortSignal.timeout(15000) });
+      if (resp.ok) return await resp.json();
+    } catch (_) {}
+  }
+  throw new Error('无法连接到 API，请检查网络');
+}
+
+async function fetchStatic(dateStr) {
+  const resp = await fetch(`data/${dateStr}.json`);
+  if (!resp.ok) return null;
+  return resp.json();
+}
+
+async function fetchAll(dateStr) {
+  const all = [];
+  let page = 1, pageCount = 1;
+  while (page <= pageCount) {
+    const json = await fetchPage(dateStr, page);
+    if (STATUS_FIELD && json[STATUS_FIELD] !== STATUS_OK) {
+      throw new Error(`API 异常: ${JSON.stringify(json)}`);
+    }
+    pageCount = json[PAGE_COUNT_FIELD] || 0;
+    let items = json;
+    for (const key of (DATA_PATH || [])) items = items?.[key];
+    if (items && items.length) all.push(...items);
+    page++;
+  }
+  return all;
+}
+
+// ====== 数据聚合 ======
+function processData(items) {
+  const groupMap = new Map();
+  for (const item of items) {
+    const key = String(item[GROUP_FIELD] || '(unknown)');
+    if (!groupMap.has(key)) groupMap.set(key, { earn: 0, clk: 0, kwMap: new Map() });
+    const g = groupMap.get(key);
+    const earn = Number(item[VALUE_FIELD] || 0);
+    const clk  = Number(item[CLICK_FIELD] || 0);
+    g.earn += earn;
+    g.clk  += clk;
+
+    if (SUB_FIELD) {
+      const raw = item[SUB_FIELD];
+      const kwList = Array.isArray(raw) ? raw : (raw ? [raw] : ['(无)']);
+      const kwKey = kwList.join(', ');
+      if (!g.kwMap.has(kwKey)) g.kwMap.set(kwKey, { earn: 0, clk: 0 });
+      const s = g.kwMap.get(kwKey);
+      s.earn += earn;
+      s.clk  += clk;
+    }
+  }
+
+  const groups = [];
+  for (const [key, data] of groupMap) {
+    const rpc = data.clk > 0 ? +(data.earn / data.clk).toFixed(2) : 0;
+    const kws = [];
+    for (const [sk, sd] of data.kwMap) {
+      kws.push({ kw: sk, earn: sd.earn, clk: sd.clk, rpc: sd.clk > 0 ? +(sd.earn / sd.clk).toFixed(2) : 0 });
+    }
+    kws.sort((a, b) => b.earn - a.earn);
+    groups.push({ key, earn: data.earn, clk: data.clk, rpc, kws });
+  }
+  groups.sort((a, b) => b.earn - a.earn);
+
+  const totalEarn = groups.reduce((s, g) => s + g.earn, 0);
+  const totalClk  = groups.reduce((s, g) => s + g.clk, 0);
+  return { groups, totalEarn, totalClk, totalRpc: totalClk > 0 ? +(totalEarn / totalClk).toFixed(2) : 0 };
+}
+
+// ====== 渲染 ======
+function render(data, showSub) {
+  window._lastData = data;
+  sumEarn.textContent = data.totalEarn.toFixed(2);
+  sumClk.textContent = data.totalClk;
+  sumAds.textContent = data.groups.length;
+  sumRpc.textContent = data.totalRpc.toFixed(2);
+  statusMsg.style.display = 'none';
+  tableContent.style.display = '';
+
+  if (showSub && SUB_FIELD) {
+    tableHead.innerHTML = '<th>ad_id</th><th>keywords</th><th class="num">回收</th><th class="num">转化</th><th class="num">RPC</th>';
+  } else {
+    tableHead.innerHTML = '<th>ad_id</th><th class="num">回收</th><th class="num">转化</th><th class="num">RPC</th>';
+  }
+
+  let html = '';
+  for (const g of data.groups) {
+    if (showSub && g.kws.length) {
+      html += `<tr><td>${esc(g.key)}</td><td style="color:#9ca3af;font-style:italic">合计</td><td class="num">${g.earn.toFixed(2)}</td><td class="num">${g.clk}</td><td class="num">${g.rpc.toFixed(2)}</td></tr>`;
+      for (const s of g.kws)
+        html += `<tr style="background:#fafafa"><td style="padding-left:28px;font-size:12px">${esc(g.key)}</td><td style="font-size:12px">${esc(s.kw)}</td><td class="num">${s.earn.toFixed(2)}</td><td class="num">${s.clk}</td><td class="num">${s.rpc.toFixed(2)}</td></tr>`;
+    } else {
+      html += `<tr><td>${esc(g.key)}</td><td class="num">${g.earn.toFixed(2)}</td><td class="num">${g.clk}</td><td class="num">${g.rpc.toFixed(2)}</td></tr>`;
+    }
+  }
+  tableBody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#9ca3af">暂无数据</td></tr>';
+}
+
+// ====== 查询入口 ======
+async function doQuery() {
+  const ds = datePicker.value;
+  if (!ds) { showError('请选择日期'); return; }
+  hideError();
+  queryBtn.disabled = true;
+  queryBtn.innerHTML = '<span class="spinner"></span>查询中';
+  showStatus('正在拉取数据...');
+  try {
+    let items = null;
+    // 策略1: 静态 JSON
+    try {
+      const staticData = await fetchStatic(ds);
+      if (staticData?.click_ids?.length) {
+        items = staticData.click_ids;
+        infoBanner.textContent = '📁 数据来源：Actions 预拉取缓存';
+        infoBanner.classList.add('show');
+      }
+    } catch (_) {}
+    // 策略2: 直接调 API
+    if (!items) items = await fetchAll(ds);
+
+    if (!items.length) { showStatus('该日期暂无数据'); resetSummary(); return; }
+    render(processData(items), showSub);
+  } catch (err) {
+    console.error(err);
+    showError(err.message);
+    showStatus('数据加载失败');
+  } finally {
+    queryBtn.disabled = false;
+    queryBtn.textContent = '查询';
+  }
+}
+
+queryBtn.onclick = doQuery;
+datePicker.onkeydown = e => { if (e.key === 'Enter') doQuery(); };
+</script>
+</body>
+</html>
